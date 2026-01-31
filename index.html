@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Пышки: выживание (5×5)</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+<style>
+  :root{
+    --bg:#faf3e0;
+    --board:#bbada0;
+    --cell:#cdc1b4;
+    --text:#3b2f2f;
+    --gap: 8px;
+    --pad: 10px;
+  }
+
+  body {
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    background: var(--bg);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100svh;
+    margin: 0;
+    color: var(--text);
+  }
+
+  .wrap{
+    width:min(92vw, 420px);
+    text-align:center;
+  }
+
+  .top{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    margin-bottom:10px;
+  }
+
+  .brand{
+    display:flex;
+    flex-direction:column;
+    align-items:flex-start;
+    gap:2px;
+  }
+  .brand .title{
+    font-weight:800;
+    letter-spacing:.2px;
+    font-size:16px;
+    line-height:1.1;
+  }
+  .brand .sub{
+    font-size:12px;
+    opacity:.75;
+  }
+
+  .scorebox{
+    background:#fff;
+    border-radius:12px;
+    padding:8px 10px;
+    box-shadow:0 4px 16px rgba(0,0,0,.06);
+    min-width:110px;
+    text-align:right;
+  }
+  .scorebox .label{
+    font-size:11px;
+    opacity:.7;
+  }
+  .scorebox .val{
+    font-weight:800;
+    font-size:20px;
+    line-height:1.1;
+  }
+
+  /* BOARD */
+  .grid {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    grid-template-rows: repeat(5, 1fr);
+    gap: var(--gap);
+    background: var(--board);
+    padding: var(--pad);
+    border-radius: 14px;
+    touch-action: none;
+    aspect-ratio: 1 / 1;
+    box-shadow:0 10px 30px rgba(0,0,0,.10);
+  }
+
+  /* background cells */
+  .cellbg {
+    background: var(--cell);
+    border-radius: 12px;
+  }
+
+  /* tile layer overlays on top of background cells */
+  .tileLayer{
+    position:absolute;
+    inset: var(--pad);
+    pointer-events:none;
+  }
+
+  .tile{
+    position:absolute;
+    border-radius:12px;
+    display:grid;
+    place-items:center;
+    font-weight:900;
+    user-select:none;
+    transform: translate(0px,0px) scale(1);
+    transition: transform 140ms ease, opacity 140ms ease;
+    will-change: transform, opacity;
+  }
+
+  .tileText{
+    font-size: clamp(24px, 6.5vw, 40px);
+  }
+
+  /* Puff stages — more contrast, same warm palette */
+  .p0 { background: #f9e6c4; }
+  .p1 { background: #f6cc8f; }
+  .p2 { background: #f2ad5f; }
+  .p3 { background: #ea8230; }
+
+  /* Chair = coffee (moves for 4 turns) */
+  .chair {
+    background: #6a3f22;
+    color: #fff;
+  }
+
+  /* Frozen chair (🍽️) */
+  .frozen {
+    background: #4b3423;
+    color: #fff;
+  }
+
+  /* x2 */
+  .x2 {
+    background: #4CAF50;
+    color: #0b2a0b;
+    font-size: clamp(16px, 4.4vw, 22px);
+    letter-spacing: .5px;
+    text-transform: uppercase;
+  }
+
+  .counter{
+    position:absolute;
+    bottom:4px;
+    right:6px;
+    font-size:10px;
+    background:rgba(0,0,0,.22);
+    color:#fff;
+    border-radius:6px;
+    padding:1px 4px;
+    line-height:1;
+    font-weight:900;
+  }
+
+  .controls{
+    display:flex;
+    gap:10px;
+    justify-content:space-between;
+    margin-top:10px;
+    align-items:center;
+  }
+
+  button{
+    appearance:none;
+    border:0;
+    background:#fff;
+    border-radius:12px;
+    padding:10px 12px;
+    font-weight:800;
+    box-shadow:0 4px 16px rgba(0,0,0,.06);
+    cursor:pointer;
+  }
+  button:active{ transform: translateY(1px); }
+
+  .hint{
+    font-size:12px;
+    opacity:.75;
+    text-align:left;
+    line-height:1.3;
+  }
+
+  .overlay{
+    position:fixed;
+    inset:0;
+    display:none;
+    place-items:center;
+    background:rgba(0,0,0,.35);
+    padding:20px;
+    z-index: 50;
+  }
+  .modal{
+    width:min(92vw, 380px);
+    background:#fff;
+    border-radius:18px;
+    padding:16px;
+    box-shadow:0 20px 60px rgba(0,0,0,.25);
+    text-align:center;
+  }
+  .modal h2{ margin:0 0 6px; }
+  .modal p{ margin:0 0 12px; opacity:.85; }
+  .modal .row{ display:flex; gap:10px; justify-content:center; }
+
+  /* Splash / Loading */
+  .splash{
+    position:fixed;
+    inset:0;
+    display:grid;
+    place-items:center;
+    background: var(--bg);
+    z-index: 100;
+  }
+  .splashCard{
+    width:min(92vw, 420px);
+    background:#fff;
+    border-radius:20px;
+    padding:16px 16px 14px;
+    box-shadow:0 18px 60px rgba(0,0,0,.12);
+    text-align:center;
+  }
+  .splashLogo{
+    width: min(320px, 80vw);
+    max-width: 320px;
+    height:auto;
+    border-radius:14px;
+    display:block;
+    margin:0 auto 10px;
+  }
+  .splashTitle{
+    font-weight:900;
+    font-size:18px;
+    margin:0;
+    letter-spacing:.2px;
+  }
+  .splashSub{
+    margin:6px 0 12px;
+    font-size:12px;
+    opacity:.75;
+    line-height:1.35;
+  }
+  .spinner{
+    width:34px;
+    height:34px;
+    border-radius:50%;
+    border:4px solid rgba(0,0,0,.10);
+    border-top-color: rgba(0,0,0,.55);
+    margin:0 auto 4px;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin{ to { transform: rotate(360deg); } }
+  .tapHint{
+    font-size:12px;
+    opacity:.8;
+    margin-top:6px;
+  }
+</style>
+</head>
+
+<body>
+
+<!-- Splash / Loading -->
+<div class="splash" id="splash" role="dialog" aria-label="Загрузка игры">
+  <div class="splashCard">
+    <img class="splashLogo" alt="Логотип" src="logo.png">
+    <p class="splashTitle">Петербургские пышки</p>
+    <p class="splashSub">Соединяй одинаковые пышки, пей кофе пока не остыл!</p>
+    <div class="spinner" aria-hidden="true"></div>
+    <div class="tapHint">Нажми, чтобы начать</div>
+  </div>
+</div>
+
+<div class="wrap" id="gameWrap" style="visibility:hidden;">
+  <div class="top">
+    <div class="brand">
+      <div class="title">Пышки: Выживание</div>
+      <div class="sub">Пышки + стулья + x2</div>
+    </div>
+    <div class="scorebox">
+      <div class="label">Очки</div>
+      <div class="val" id="score">0</div>
+    </div>
+  </div>
+
+  <div class="grid" id="grid" aria-label="Игровое поле 5 на 5"></div>
+
+  <div class="controls">
+    <button id="restart">Новая игра</button>
+    <div class="hint">Свайпы / ← ↑ → ↓ / WASD<br>
+      +10 за объединение пышек<br>
+      ☕ появляются по 2<br>
+      ☕ двигаются 4 хода → 🍽️ навсегда<br>
+      x2: если в этом ходу рядом с объединением — очки ×2, иначе исчезает
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h2>Игра окончена</h2>
+    <p>Ходов больше нет.<br>Твой счёт: <b id="finalScore">0</b></p>
+    <div class="row">
+      <button id="again">Сыграть ещё</button>
+    </div>
+  </div>
+</div>
+
+
+<script>
+  
+  // Telegram Mini App helpers (safe to ignore in обычном браузере)
+  try{
+    if (window.Telegram && window.Telegram.WebApp){
+      window.Telegram.WebApp.ready();
+      window.Telegram.WebApp.expand();
+    }
+  }catch(_){}
+const SIZE = 5;
+
+  // Tile shapes:
+  // Puff:  { id, type:"puff", bites:0..3 }
+  // Chair: { id, type:"chair", ttl:4, frozen:false }  // ttl decreases after each successful move; when 0 -> frozen true (🍽️)
+  // Mult:  { id, type:"x2", usedThisMove:false }      // one-move window (disappears if not used)
+  let grid = [];
+  let score = 0;
+  let nextId = 1;
+
+  const gridEl = document.getElementById("grid");
+  const scoreEl = document.getElementById("score");
+  const overlayEl = document.getElementById("overlay");
+  const finalScoreEl = document.getElementById("finalScore");
+
+  const splashEl = document.getElementById("splash");
+  const gameWrapEl = document.getElementById("gameWrap");
+
+  const EMOJI_PUFF  = ["🥯","🥯","🥯","🥯"];
+  const EMOJI_CHAIR = "☕";
+  const EMOJI_FROZEN = "🍽️";
+
+  // ---- Tile rendering with animation ----
+  let tileLayerEl = null;
+  const tileEls = new Map();  // id -> element
+
+  function ensureBoardBackground(){
+    // Build background cells once + tile layer once
+    if (gridEl.querySelector(".cellbg")) return;
+    gridEl.innerHTML = "";
+    for (let i=0; i<SIZE*SIZE; i++){
+      const bg = document.createElement("div");
+      bg.className = "cellbg";
+      gridEl.appendChild(bg);
+    }
+    tileLayerEl = document.createElement("div");
+    tileLayerEl.className = "tileLayer";
+    gridEl.appendChild(tileLayerEl);
+  }
+
+  function getLayout(){
+    const rect = tileLayerEl.getBoundingClientRect();
+    const gap = parseFloat(getComputedStyle(gridEl).getPropertyValue("--gap")) || 8;
+    const cell = (rect.width - gap * (SIZE-1)) / SIZE;
+    return { gap, cell };
+  }
+
+  function tileClass(t){
+    if (!t) return "";
+    if (t.type === "puff") return "p" + t.bites;
+    if (t.type === "chair") return t.frozen ? "frozen" : "chair";
+    if (t.type === "x2") return "x2";
+    return "";
+  }
+
+  function tileText(t){
+    if (!t) return "";
+    if (t.type === "puff") return EMOJI_PUFF[t.bites] ?? "🥯";
+    if (t.type === "chair") return t.frozen ? EMOJI_FROZEN : EMOJI_CHAIR;
+    if (t.type === "x2") return "x2";
+    return "";
+  }
+
+  function updateTileElement(el, t){
+    el.className = "tile " + tileClass(t);
+
+    let text = el.querySelector(".tileText");
+    if (!text){
+      text = document.createElement("div");
+      text.className = "tileText";
+      el.appendChild(text);
+    }
+    text.textContent = tileText(t);
+
+    let badge = el.querySelector(".counter");
+    if (t.type === "chair" && !t.frozen){
+      if (!badge){
+        badge = document.createElement("div");
+        badge.className = "counter";
+        el.appendChild(badge);
+      }
+      badge.textContent = t.ttl;
+    } else {
+      if (badge) badge.remove();
+    }
+  }
+
+  function renderTiles(animate=true){
+    ensureBoardBackground();
+    const { gap, cell } = getLayout();
+
+    const targets = new Map(); // id -> {x,y,tile}
+    for (let y=0; y<SIZE; y++){
+      for (let x=0; x<SIZE; x++){
+        const t = grid[y][x];
+        if (t) targets.set(t.id, {x,y,tile:t});
+      }
+    }
+
+    // remove old tiles not present
+    for (const [id, el] of tileEls){
+      if (!targets.has(id)){
+        if (animate){
+          // shrink out
+          const cur = el.style.transform || "translate(0px,0px) scale(1)";
+          el.style.transform = cur.replace(/scale\([^)]+\)/, "scale(0.85)");
+          el.style.opacity = "0";
+          setTimeout(() => { el.remove(); tileEls.delete(id); }, 150);
+        } else {
+          el.remove(); tileEls.delete(id);
+        }
+      }
+    }
+
+    // add/update tiles
+    for (const [id, info] of targets){
+      const left = (cell + gap) * info.x;
+      const top  = (cell + gap) * info.y;
+
+      let el = tileEls.get(id);
+      if (!el){
+        el = document.createElement("div");
+        el.dataset.id = id;
+        el.style.width = cell + "px";
+        el.style.height = cell + "px";
+        el.style.opacity = "0";
+        el.style.transform = `translate(${left}px, ${top}px) scale(0.85)`;
+        tileLayerEl.appendChild(el);
+        tileEls.set(id, el);
+
+        updateTileElement(el, info.tile);
+
+        requestAnimationFrame(() => {
+          el.style.opacity = "1";
+          el.style.transform = `translate(${left}px, ${top}px) scale(1)`;
+        });
+      } else {
+        el.style.width = cell + "px";
+        el.style.height = cell + "px";
+        updateTileElement(el, info.tile);
+
+        if (animate){
+          el.style.opacity = "1";
+          el.style.transform = `translate(${left}px, ${top}px) scale(1)`;
+        } else {
+          el.style.transition = "none";
+          el.style.opacity = "1";
+          el.style.transform = `translate(${left}px, ${top}px) scale(1)`;
+          el.offsetHeight;
+          el.style.transition = "";
+        }
+      }
+    }
+
+    scoreEl.textContent = score;
+  }
+
+  // ---- Game state helpers ----
+  function emptyGrid(){
+    grid = Array.from({length: SIZE}, () => Array(SIZE).fill(null));
+  }
+
+  function makeTile(obj){
+    return { id: nextId++, ...obj };
+  }
+
+  function cloneTile(t){
+    if (!t) return null;
+    if (t.type === "puff") return { id:t.id, type:"puff", bites:t.bites };
+    if (t.type === "chair") return { id:t.id, type:"chair", ttl:t.ttl, frozen: !!t.frozen };
+    if (t.type === "x2") return { id:t.id, type:"x2", usedThisMove: !!t.usedThisMove };
+    return null;
+  }
+
+  function getEmptyCells(){
+    const empty = [];
+    for (let y=0; y<SIZE; y++)
+      for (let x=0; x<SIZE; x++)
+        if (!grid[y][x]) empty.push({x,y});
+    return empty;
+  }
+
+  function placeAtRandom(tile){
+    const empty = getEmptyCells();
+    if (!empty.length) return false;
+    const {x,y} = empty[Math.floor(Math.random()*empty.length)];
+    grid[y][x] = tile;
+    return true;
+  }
+
+  function spawnChairPair(){
+    const empty = getEmptyCells();
+    if (empty.length < 2) return false;
+    for (let k=0; k<2; k++){
+      const e = getEmptyCells();
+      if (!e.length) return false;
+      const {x,y} = e[Math.floor(Math.random()*e.length)];
+      grid[y][x] = makeTile({ type:"chair", ttl:4, frozen:false });
+    }
+    return true;
+  }
+
+  function spawnRandomTile(){
+    const r = Math.random();
+    if (r < 0.86){
+      return makeTile({ type:"puff", bites:0 });
+    } else {
+      return makeTile({ type:"x2", usedThisMove:false });
+    }
+  }
+
+  function neighbors4(x,y){
+    const out = [];
+    if (x>0) out.push({x:x-1,y});
+    if (x<SIZE-1) out.push({x:x+1,y});
+    if (y>0) out.push({x,y:y-1});
+    if (y<SIZE-1) out.push({x,y:y+1});
+    return out;
+  }
+
+  function isFrozenChair(t){
+    return t && t.type === "chair" && t.frozen;
+  }
+
+  function slideSegment(seg){
+    const res = seg.filter(v => v);
+    const mergeResults = []; // { index, type:"puff"|"chair" }
+    for (let i=0; i<res.length-1; i++){
+      const a = res[i], b = res[i+1];
+      if (!a || !b) continue;
+
+      if (a.type === "puff" && b.type === "puff" && a.bites === b.bites){
+        a.bites++;
+        mergeResults.push({ index:i, type:"puff" });
+        if (a.bites >= 4) res[i] = null;
+        res[i+1] = null;
+        i++;
+        continue;
+      }
+
+      if (a.type === "chair" && b.type === "chair" && !a.frozen && !b.frozen){
+        mergeResults.push({ index:i, type:"chair" });
+        res[i] = null;
+        res[i+1] = null;
+        i++;
+        continue;
+      }
+    }
+    const compact = res.filter(v => v);
+    return { compact, mergeResults };
+  }
+
+  function slideLineWithBlocks(line){
+    const out = Array(line.length).fill(null);
+    const mergeResults = [];
+    let start = 0;
+
+    for (let i=0; i<=line.length; i++){
+      const isBlock = (i === line.length) ? true : isFrozenChair(line[i]);
+      if (!isBlock) continue;
+
+      const seg = line.slice(start, i);
+      const { compact, mergeResults: mr } = slideSegment(seg);
+
+      for (let k=0; k<compact.length; k++){
+        out[start + k] = compact[k];
+      }
+      for (const m of mr){
+        mergeResults.push({ index: start + m.index, type: m.type });
+      }
+
+      if (i < line.length){
+        out[i] = line[i];
+      }
+      start = i + 1;
+    }
+
+    return { compactLine: out, mergeResults };
+  }
+
+  function hasMoves(){
+    for (let y=0; y<SIZE; y++)
+      for (let x=0; x<SIZE; x++)
+        if (!grid[y][x]) return true;
+
+    for (let y=0; y<SIZE; y++){
+      for (let x=0; x<SIZE; x++){
+        const t = grid[y][x];
+        if (!t) continue;
+
+        const right = x+1<SIZE ? grid[y][x+1] : null;
+        const down  = y+1<SIZE ? grid[y+1][x] : null;
+
+        if (right){
+          if (t.type==="puff" && right.type==="puff" && t.bites===right.bites) return true;
+          if (t.type==="chair" && !t.frozen && right.type==="chair" && !right.frozen) return true;
+        }
+        if (down){
+          if (t.type==="puff" && down.type==="puff" && t.bites===down.bites) return true;
+          if (t.type==="chair" && !t.frozen && down.type==="chair" && !down.frozen) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  function gameOver(){
+    finalScoreEl.textContent = score;
+    overlayEl.style.display = "grid";
+  }
+  function hideGameOver(){
+    overlayEl.style.display = "none";
+  }
+
+  function decayChairsAfterMove(){
+    for (let y=0; y<SIZE; y++){
+      for (let x=0; x<SIZE; x++){
+        const t = grid[y][x];
+        if (t && t.type==="chair" && !t.frozen){
+          t.ttl -= 1;
+          if (t.ttl <= 0){
+            t.frozen = true;
+            t.ttl = 0;
+          }
+        }
+      }
+    }
+  }
+
+  function move(dx, dy){
+    if (overlayEl.style.display === "grid") return;
+
+    for (let y=0; y<SIZE; y++)
+      for (let x=0; x<SIZE; x++)
+        if (grid[y][x] && grid[y][x].type === "x2")
+          grid[y][x].usedThisMove = false;
+
+    const before = grid.map(row => row.map(cloneTile));
+    const puffMergeCoords = [];
+
+    for (let i=0; i<SIZE; i++){
+      let line = [];
+      let coords = [];
+
+      for (let j=0; j<SIZE; j++){
+        const x = dx ? (dx > 0 ? SIZE-1-j : j) : i;
+        const y = dy ? (dy > 0 ? SIZE-1-j : j) : i;
+        line.push(grid[y][x]);
+        coords.push({x,y});
+      }
+
+      const { compactLine, mergeResults } = slideLineWithBlocks(line);
+
+      for (let j=0; j<SIZE; j++){
+        const {x,y} = coords[j];
+        grid[y][x] = compactLine[j];
+      }
+
+      for (const mr of mergeResults){
+        if (mr.type === "puff"){
+          const {x,y} = coords[mr.index];
+          puffMergeCoords.push({x,y});
+        }
+      }
+    }
+
+    // detect movement
+    let moved = false;
+    outer:
+    for (let y=0; y<SIZE; y++){
+      for (let x=0; x<SIZE; x++){
+        const a = before[y][x], b = grid[y][x];
+        const as = a ? (a.type==="puff" ? `p${a.bites}` : (a.type==="chair" ? `c${a.frozen?1:0}${a.ttl}` : a.type)) : null;
+        const bs = b ? (b.type==="puff" ? `p${b.bites}` : (b.type==="chair" ? `c${b.frozen?1:0}${b.ttl}` : b.type)) : null;
+        if (as !== bs){ moved = true; break outer; }
+      }
+    }
+    if (!moved) return;
+
+    for (const m of puffMergeCoords){
+      let mult = 1;
+      for (const n of neighbors4(m.x, m.y)){
+        const t = grid[n.y][n.x];
+        if (t && t.type === "x2"){
+          mult = 2;
+          t.usedThisMove = true;
+        }
+      }
+      score += 10 * mult;
+    }
+
+    for (let y=0; y<SIZE; y++){
+      for (let x=0; x<SIZE; x++){
+        const t = grid[y][x];
+        if (t && t.type === "x2" && !t.usedThisMove){
+          grid[y][x] = null;
+        }
+      }
+    }
+
+    decayChairsAfterMove();
+
+    if (Math.random() < 0.26){
+      spawnChairPair();
+    }
+    placeAtRandom(spawnRandomTile());
+
+    renderTiles(true);
+
+    if (!hasMoves()){
+      setTimeout(gameOver, 150);
+    }
+  }
+
+  function start(){
+    hideGameOver();
+    score = 0;
+    nextId = 1;
+    emptyGrid();
+    ensureBoardBackground();
+
+    for (const [,el] of tileEls){ el.remove(); }
+    tileEls.clear();
+
+    placeAtRandom(makeTile({ type:"puff", bites:0 }));
+    placeAtRandom(makeTile({ type:"puff", bites:0 }));
+    renderTiles(false);
+  }
+
+  document.addEventListener("keydown", (e) => {
+    const k = e.key;
+    if (k === "ArrowLeft" || k === "a" || k === "A") move(-1, 0);
+    if (k === "ArrowRight" || k === "d" || k === "D") move(1, 0);
+    if (k === "ArrowUp" || k === "w" || k === "W") move(0, -1);
+    if (k === "ArrowDown" || k === "s" || k === "S") move(0, 1);
+  });
+
+  // Pointer swipes
+  let px = 0, py = 0, pointerDown = false;
+
+  function onPointerDown(e){
+    pointerDown = true;
+    px = e.clientX;
+    py = e.clientY;
+    try{ gridEl.setPointerCapture(e.pointerId); }catch(_){}
+  }
+
+  function onPointerUp(e){
+    if (!pointerDown) return;
+    pointerDown = false;
+
+    const dx = e.clientX - px;
+    const dy = e.clientY - py;
+
+    const ax = Math.abs(dx);
+    const ay = Math.abs(dy);
+    const threshold = 16;
+
+    if (ax < threshold && ay < threshold) return;
+
+    if (ax > ay) move(dx > 0 ? 1 : -1, 0);
+    else move(0, dy > 0 ? 1 : -1);
+  }
+
+  gridEl.addEventListener("pointerdown", onPointerDown);
+  gridEl.addEventListener("pointerup", onPointerUp);
+  gridEl.addEventListener("pointercancel", () => { pointerDown = false; });
+
+  window.addEventListener("resize", () => { if (tileLayerEl) renderTiles(false); });
+
+  document.getElementById("restart").addEventListener("click", start);
+  document.getElementById("again").addEventListener("click", start);
+
+  function hideSplash(){
+    splashEl.style.display = "none";
+    gameWrapEl.style.visibility = "visible";
+    setTimeout(() => renderTiles(false), 0);
+  }
+
+  start();
+
+  splashEl.addEventListener("click", hideSplash);
+  splashEl.addEventListener("pointerup", hideSplash);
+  setTimeout(() => {
+    if (splashEl.style.display !== "none") hideSplash();
+  }, 1200);
+</script>
+
+</body>
+</html>
