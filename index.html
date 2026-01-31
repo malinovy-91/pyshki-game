@@ -16,6 +16,8 @@
     --pad: 10px;
   }
 
+  html, body { overscroll-behavior: none; }
+
   body {
     font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
     background: var(--bg);
@@ -271,7 +273,8 @@
     <p class="splashTitle">Петербургские пышки</p>
     <p class="splashSub">Соединяй одинаковые пышки, пей кофе пока не остыл!</p>
     <div class="spinner" aria-hidden="true"></div>
-    <div class="tapHint">Нажми, чтобы начать</div>
+    <button id="splashStartBtn" style="margin-top:10px; width:100%; max-width:260px;">Начать</button>
+    <div class="tapHint">Если свайп сверху закрывает окно — нажми «Начать»</div>
   </div>
 </div>
 
@@ -785,6 +788,8 @@ const SIZE = 5;
   }
 
   gridEl.addEventListener("pointerdown", onPointerDown);
+  // Prevent page scroll / swipe conflicts while interacting with the board
+  gridEl.addEventListener("touchmove", (e) => { e.preventDefault(); }, { passive: false });
   gridEl.addEventListener("pointerup", onPointerUp);
   gridEl.addEventListener("pointercancel", () => { pointerDown = false; });
 
@@ -803,6 +808,8 @@ const SIZE = 5;
 
   splashEl.addEventListener("click", hideSplash);
   splashEl.addEventListener("pointerup", hideSplash);
+  const startBtn = document.getElementById("splashStartBtn");
+  if (startBtn) startBtn.addEventListener("click", (e) => { e.stopPropagation(); hideSplash(); });
   setTimeout(() => {
     if (splashEl.style.display !== "none") hideSplash();
   }, 1200);
